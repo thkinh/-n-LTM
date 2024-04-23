@@ -20,7 +20,7 @@ namespace TCPServer2
         private List<TcpClient> clients_list = new List<TcpClient>();
         private Dictionary<int, TcpClient> clients_Dict = new Dictionary<int, TcpClient>();
         private int attending = 0;
-
+        private int[] lobby_id = { 5, 6, 7, 8, 9 };
 
         public Server()
         {
@@ -78,14 +78,36 @@ namespace TCPServer2
         {
             Packet packet = new Packet(_packet);
             int len = packet.ReadInt();
-            int player_id = packet.ReadInt();
-            bool next_or_prev = packet.ReadBool();
-            int foodname = packet.ReadInt();
-
-            SendPacket(foodname, next_or_prev, this_client);
             
 
-            return $"{player_id} : {Food.getName(foodname)} / {next_or_prev} / data_len = {len}";
+            if(len == 9) //packet of food delivery
+            {
+                int player_id = packet.ReadInt();
+                bool next_or_prev = packet.ReadBool();
+                int foodname = packet.ReadInt();
+                SendPacket(foodname, next_or_prev, this_client);
+                packet.Dispose();
+                return $"{player_id} : {Food.getName(foodname)} / {next_or_prev} / data_len = {len}";
+            }
+            else if (len == 20) //packet of lobby creation
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    lobby_id[i] = packet.ReadInt();
+                    Console.WriteLine($"lobby id {i} is : {lobby_id[i]}");
+                }
+                //Send packet lobby acept
+                SendPacket(true, this_client);
+                return $"Lobby created, getting this player into lobby";
+            }
+            else if (len == 21) // packet of lobby authentication
+            {
+
+            }
+
+
+
+            return $"Packet's length is unknowed {len}, this type of packet doesn't exists"; 
         }
 
         public async void Listen()
@@ -115,6 +137,7 @@ namespace TCPServer2
             hello_packet.Write("Welcome to server");
             hello_packet.WriteLength();
             await _client.GetStream().WriteAsync(hello_packet.ToArray(),0,hello_packet.Length());
+            hello_packet.Dispose();
             return;
         }
 
@@ -127,14 +150,20 @@ namespace TCPServer2
             int id = packet.ReadInt();
             string msg = packet.ReadString();
             Console.WriteLine($"Received hello packet from a client: {id}/ {msg}");
-            Console.WriteLine($"Setting this client's id = {attending - 1}\n");
+            Console.WriteLine($"Setting this client's id = {attending}\n");
+            packet.Dispose();
             return;
         }
 
 
-        public void SendPacket(Food food)
-        {
 
+        public void SendPacket(bool acept_into_lobby, TcpClient client)
+        {
+            Packet packet = new Packet();
+            packet.Write(acept_into_lobby);
+            packet.WriteLength();
+            client.GetStream().WriteAsync(packet.ToArray(),0,packet.Length());
+            packet.Dispose();
         }
 
 
@@ -161,6 +190,7 @@ namespace TCPServer2
                 }
                 Console.WriteLine($"Transfering this food to player {client_key_to_send}");
                 clients_Dict[client_key_to_send].GetStream().WriteAsync(packet.ToArray(), 0, packet.Length());
+                packet.Dispose();
                 return;
             }
             else if (!next)
@@ -174,10 +204,12 @@ namespace TCPServer2
                     Console.WriteLine($"Transfering this food to player {client_key_to_send}");
 
                     clients_Dict.Values.Last().GetStream().WriteAsync(packet.ToArray(),0, packet.Length());
+                    packet.Dispose();
                     return;
                 }
                 Console.WriteLine($"Transfering this food to player {client_key_to_send}");
                 clients_Dict[client_key_to_send].GetStream().WriteAsync(packet.ToArray(), 0, packet.Length());
+                packet.Dispose();
                 return;
             }
         }
