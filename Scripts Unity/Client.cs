@@ -7,12 +7,11 @@ using System;
 using UnityEngine.SceneManagement;
 using Assets.Scripts.GamePlay;
 using Unity.VisualScripting;
-
 namespace Assets.Scripts
 {
     public class Client
     {
-        TcpClient tcpClient;
+        public TcpClient tcpClient;
         NetworkStream stream;
         string address = "127.0.0.1";
         int port = 9999;
@@ -36,10 +35,15 @@ namespace Assets.Scripts
                     SendPacket("Hello server");
                     byte[] first_data = new byte[1024];
                     await stream.ReadAsync(first_data,0,first_data.Length);
-                    SceneManager.LoadSceneAsync("GamePlay");
+                    if (SceneManager.GetActiveScene().name == "Choose cr or join")
+                    {
+                        SceneManager.LoadScene("CreateLobby");
+                    }
+
                     WelcomeReceived(first_data, first_data.Length);
                     await Task.Run(() => { ListenToServer(); });
                 }
+
 
             }
             catch(Exception e)
@@ -83,7 +87,7 @@ namespace Assets.Scripts
                     //Debug.Log(ex.Message.ToString());
                 }
             }
-
+            
         }
 
         public void Handle_Incoming_Packet(byte[] data, int data_length)
@@ -93,14 +97,30 @@ namespace Assets.Scripts
                 Debug.Log("Received a packet from server");
                 Packet packet = new Packet(data);
                 int lenght = packet.ReadInt();
-                int foodname = packet.ReadInt();
-                Food food = new Food(foodname);
-                EntityManager.instance.Spawn_Food(food);
+                if (lenght == 4) //received a packet of only data of food
+                {
+                    int foodname = packet.ReadInt();
+                    Food food = new Food(foodname);
+                    EntityManager.instance.Spawn_Food(food);
+                }
+                else if (lenght == 1)  //received a confirm lobby creation packet
+                {
+                    if(SceneManager.GetActiveScene().name == "Arrange Position")
+                    {
+                        RandomCodeRoom.m_created = packet.ReadBool();
+                    }
+                    else if (SceneManager.GetActiveScene().name == "Loading")
+                    {
+                        JoinRoom_Manager.Can_join = packet.ReadBool();
+                    }
+                }
+                
+
                 
             }
             catch
             {
-                Debug.Log("Loi xu ly goi tin, khong the nhan dang food");
+                Debug.Log("Loi xu ly goi tin, khong the nhan dang packet");
             }
         }
 
@@ -122,6 +142,39 @@ namespace Assets.Scripts
                 //Debug.Log("Loi khi gui?");
             }
         }
+
+        public void SendPacket(int[] data)
+        {
+            try
+            {
+                using (Packet packet = new Packet())
+                {
+                   foreach(int code in data)
+                   {
+                        packet.Write(code);
+                   }
+                    packet.WriteLength();
+                    stream.WriteAsync(packet.ToArray(), 0, packet.Length());
+
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.Log(e.Message);
+            }
+        }
+
+        public void SendPacket(int data)
+        {
+            using (Packet packet = new Packet())
+            {
+                packet.Write(data);
+                packet.WriteLength();
+                stream.WriteAsync(packet.ToArray(), 0, packet.Length());
+            }
+        }
+
+
 
         public void SendPacket(Food food, bool next_or_prev)
         {
